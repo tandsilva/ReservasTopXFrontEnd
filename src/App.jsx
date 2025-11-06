@@ -1,76 +1,83 @@
-import React, { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { LoginForm } from "./components/LoginForm";
-import { RegisterPage } from "./RegisterPage.jsx";
-import MapaRestaurantes from "./components/MapaRestaurantes";
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { LoginForm } from './component/LoginForm';
+import { RegisterPage } from './RegisterPage';
+import { Navbar } from './component/Navbar';
+import { MapaRestaurantes } from './component/MapaRestaurantes';
+import { CadastroJuridico } from './component/CadastroJuridico';
 
-export default function App() {
-  const [auth, setAuth] = useState(null);
+// Wrapper para rotas protegidas
+function PrivateRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
 
-  useEffect(() => {
-    const saved = localStorage.getItem("rtx_auth");
-    if (saved) {
-      try {
-        setAuth(JSON.parse(saved));
-      } catch { /* ignore */ }
-    }
-  }, []);
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
 
-  const handleLoginSuccess = (user) => {
-    setAuth(user);
-  };
+  return children;
+}
 
-  const handleLogout = () => {
-    localStorage.removeItem("rtx_auth");
-    setAuth(null);
-  };
+// Wrapper para rotas públicas (redireciona se já estiver logado)
+function PublicRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  
+  if (isAuthenticated) {
+    return <Navigate to={location.state?.from?.pathname || '/'} replace />;
+  }
 
+  return children;
+}
+
+function AppRoutes() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Rotas públicas */}
-        <Route 
-          path="/" 
-          element={
-            auth ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <LoginForm onLoginSuccess={handleLoginSuccess} />
-            )
-          } 
-        />
-        <Route 
-          path="/register" 
-          element={
-            auth ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
+    <>
+      <Navbar />
+      <div style={{ paddingTop: '64px' }}> {/* Espaço para o navbar fixo */}
+        <Routes>
+          {/* Rotas públicas */}
+          <Route path="/login" element={
+            <PublicRoute>
+              <LoginForm />
+            </PublicRoute>
+          } />
+          <Route path="/register" element={
+            <PublicRoute>
               <RegisterPage />
-            )
-          } 
-        />
+            </PublicRoute>
+          } />
 
-        {/* Rota protegida */}
-        <Route 
-          path="/dashboard" 
-          element={
-            auth ? (
-              <div className="App" style={{ padding: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                  <div><strong>Bem-vindo, {auth.username}</strong></div>
-                  <button onClick={handleLogout}>Sair</button>
-                </div>
-                <MapaRestaurantes />
-              </div>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          } 
-        />
+          {/* Rotas protegidas */}
+          <Route path="/mapa-restaurantes" element={
+            <PrivateRoute>
+              <MapaRestaurantes />
+            </PrivateRoute>
+          } />
+          <Route path="/cadastro-juridico" element={
+            <PrivateRoute>
+              <CadastroJuridico />
+            </PrivateRoute>
+          } />
 
-        {/* Redireciona qualquer rota desconhecida */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Redirecionamentos */}
+          <Route path="/" element={<Navigate to="/mapa-restaurantes" replace />} />
+          <Route path="*" element={<Navigate to="/mapa-restaurantes" replace />} />
+        </Routes>
+      </div>
+    </>
   );
 }
+
+function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
+
+export default App;

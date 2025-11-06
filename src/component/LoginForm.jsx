@@ -1,11 +1,15 @@
 import React, { useState } from "react";
 import { apiFetch } from "../lib/api";
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export function LoginForm({ onLoginSuccess }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { login, role } = useAuth();
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -13,23 +17,24 @@ export function LoginForm({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const data = await apiFetch("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ username, password }),
-      });
-
-      const role =
-        data.role ||
-        (Array.isArray(data.roles) && data.roles[0]
-          ? data.roles[0].replace(/^ROLE_/, "")
-          : "USER");
-
-      const auth = { token: data.token, username: data.username, role };
-      localStorage.setItem("rtx_auth", JSON.stringify(auth));
-      onLoginSuccess?.(auth);
+      // Prefer using AuthContext.login so the app has a single auth flow
+      const result = await login(username, password);
+      // optional callback
+      onLoginSuccess?.(result);
+      
+      // Redireciona baseado no role
+      const userRole = result.user.role || result.user.roles?.[0];
+      if (userRole === "ROLE_ADMIN") {
+        console.log("Admin login - redirecionando para cadastro");
+        navigate('/cadastro-juridico');
+      } else {
+        console.log("User login - redirecionando para mapa");
+        navigate('/mapa-restaurantes');
+      }
     } catch (err) {
       console.error("Erro no login:", err);
-      setError("Falha no login. Verifique usuário/senha.");
+      // surface the real error message when available (helps debugging)
+      setError(err?.message || "Falha no login. Verifique usuário/senha.");
     } finally {
       setLoading(false);
     }
@@ -42,100 +47,89 @@ export function LoginForm({ onLoginSuccess }) {
       alignItems: 'center',
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
+      padding: '20px 8px',
+      width: '100vw',
+      overflowX: 'hidden'
     }}>
       <style>{`
+        /* global reset to avoid unexpected overflow and margins */
+        html, body, #root {
+          margin: 0;
+          padding: 0;
+          height: 100%;
+          box-sizing: border-box;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* prevent horizontal scroll from components that push outside the viewport */
+        html, body { overflow-x: hidden; }
+
+        *, *::before, *::after { box-sizing: inherit; }
+
         @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(-20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
+
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
         .login-input:focus {
           outline: none;
           border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          box-shadow: 0 0 0 3px rgba(102,126,234,0.08);
         }
 
-        .login-button {
-          transition: all 0.3s ease;
-        }
-
+        .login-button { transition: all 0.22s cubic-bezier(.2,.9,.3,1); }
         .login-button:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+          box-shadow: 0 10px 20px rgba(102,126,234,0.28);
+        }
+        .login-button:active:not(:disabled){ transform: translateY(0); }
+
+        .login-link{ color:#667eea; text-decoration:none; font-weight:500; transition:color .15s ease }
+        .login-link:hover{ color:#764ba2; text-decoration:underline }
+
+        /* semantic class names used on elements below */
+        .login-card{ background:white; border-radius:20px; box-shadow:0 20px 60px rgba(0,0,0,0.28); padding:48px 40px; width:100%; max-width:420px; animation:slideIn .45s ease-out }
+        .login-logo{ width:80px; height:80px; margin:0 auto 24px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); border-radius:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 30px rgba(102,126,234,0.3) }
+        .login-title{ text-align:center; margin-bottom:8px; font-size:28px; font-weight:700; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text }
+        .login-desc{ text-align:center; color:#6b7280; margin-bottom:32px; font-size:14px }
+
+        /* ensure inputs/buttons don't cause horizontal overflow */
+        .login-card input, .login-card button { max-width:100%; box-sizing:border-box }
+
+        /* Mobile-first responsive tweaks */
+        @media (max-width: 480px) {
+          .login-card{ padding:20px; border-radius:14px; margin:0 8px }
+          .login-logo{ width:64px; height:64px; border-radius:14px }
+          .login-title{ font-size:22px }
+          .login-desc{ margin-bottom:20px }
+          .login-input{ padding:12px 14px }
+          .login-button{ padding:12px; font-size:15px }
         }
 
-        .login-button:active:not(:disabled) {
-          transform: translateY(0);
-        }
-
-        .login-link {
-          color: #667eea;
-          text-decoration: none;
-          font-weight: 500;
-          transition: color 0.2s ease;
-        }
-
-        .login-link:hover {
-          color: #764ba2;
-          text-decoration: underline;
+        @media (min-width: 481px) and (max-width: 800px) {
+          .login-card{ padding:32px }
+          .login-title{ font-size:24px }
         }
       `}</style>
 
-      <div style={{
-        background: 'white',
-        borderRadius: '20px',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-        padding: '48px 40px',
+      <div className="login-card" style={{
+        /* inline styles kept as gentle fallback for older browsers */
         width: '100%',
-        maxWidth: '420px',
-        animation: 'slideIn 0.5s ease-out'
+        maxWidth: '420px'
       }}>
         {/* Logo/Ícone */}
-        <div style={{
-          width: '80px',
-          height: '80px',
-          margin: '0 auto 24px',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          borderRadius: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)'
-        }}>
-          <span style={{ fontSize: '40px' }}>🔐</span>
+        <div className="login-logo">
+          <span style={{ fontSize: '40px' }} aria-hidden>🔐</span>
         </div>
 
-        <h2 style={{
-          textAlign: 'center',
-          marginBottom: '8px',
-          fontSize: '28px',
-          fontWeight: '700',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text'
-        }}>
+        <h2 className="login-title">
           Bem-vindo de volta!
         </h2>
 
-        <p style={{
-          textAlign: 'center',
-          color: '#6b7280',
-          marginBottom: '32px',
-          fontSize: '14px'
-        }}>
+        <p className="login-desc">
           Entre com suas credenciais para continuar
         </p>
 

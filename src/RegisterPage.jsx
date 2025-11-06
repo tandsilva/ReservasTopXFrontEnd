@@ -19,6 +19,7 @@ export function RegisterPage() {
     razaoSocial: "",
     categoria: ""
   });
+  const [restaurantPhase, setRestaurantPhase] = useState("admin"); // admin -> details
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -79,35 +80,43 @@ export function RegisterPage() {
     }
   };
 
-  const registerRestaurant = async () => {
+  // Two-phase UI: collect admin info first, then restaurant details, but send
+  // a single combined payload to /users with role=ADMIN and nested restaurant
+  // object. This avoids backend race/ordering issues.
+  const createAdminForRestaurant = () => {
+    // validate minimal admin fields then proceed to details phase
+    setError("");
+    if (!formData.username || !formData.password || !formData.email || !formData.cpf) {
+      return setError("Preencha todos os dados do administrador (username, CPF, email, senha)");
+    }
+    setRestaurantPhase("details");
+  };
+
+  const createRestaurant = async () => {
     setError("");
     setLoading(true);
-
     try {
-      // 1. Criar User ADMIN
-      const userData = await apiFetch("/users", {
-        method: "POST",
-        body: JSON.stringify({
-          username: formData.username,
-          password: formData.password,
-          email: formData.email,
-          telefone: formData.telefone,
-          role: "ADMIN"
-        })
-      });
-
-      // 2. Criar Restaurant vinculado
-      await apiFetch("/restaurants/create", {
-        method: "POST",
-        body: JSON.stringify({
-          userId: userData.id,
+      // Combined payload: user (ADMIN) + restaurant nested object
+      const payload = {
+        username: formData.username,
+        password: formData.password,
+        email: formData.email,
+        telefone: formData.telefone,
+        cpf: formData.cpf.replace(/\D/g, ""),
+        role: "ADMIN",
+        restaurant: {
           cnpj: formData.cnpj.replace(/\D/g, ""),
           nomeFantasia: formData.nomeFantasia,
           razaoSocial: formData.razaoSocial,
           email: formData.email,
           telefone: formData.telefone,
           categoria: formData.categoria
-        })
+        }
+      };
+
+      await apiFetch("/users", {
+        method: "POST",
+        body: JSON.stringify(payload)
       });
 
       setSuccess(true);
@@ -125,8 +134,17 @@ export function RegisterPage() {
     e.preventDefault();
     if (step === "user") {
       registerUser();
-    } else if (step === "restaurant") {
-      registerRestaurant();
+      return;
+    }
+
+    if (step === "restaurant") {
+      // If we're still on admin phase, advance to details (client-side validation)
+      if (restaurantPhase === 'admin') {
+        createAdminForRestaurant();
+        return;
+      }
+      // otherwise submit combined payload
+      createRestaurant();
     }
   };
 
@@ -473,7 +491,7 @@ export function RegisterPage() {
           </>
         )}
 
-        {/* Restaurant Form */}
+        {/* Restaurant Form: split in two phases - create admin then restaurant details */}
         {step === "restaurant" && (
           <>
             <div style={{
@@ -504,249 +522,340 @@ export function RegisterPage() {
               marginBottom: '24px',
               fontSize: '13px'
             }}>
-              Preencha os dados do seu estabelecimento
+              {restaurantPhase === 'admin' ? 'Crie o usuário administrador do estabelecimento' : 'Agora informe os dados do estabelecimento'}
             </p>
 
-            <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  Nome de usuário do administrador
-                </label>
-                <input
-                  type="text"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  CNPJ
-                </label>
-                <input
-                  type="text"
-                  value={formData.cnpj}
-                  onChange={handleCNPJChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  placeholder="00.000.000/0000-00"
-                  maxLength="18"
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  Nome Fantasia
-                </label>
-                <input
-                  type="text"
-                  name="nomeFantasia"
-                  value={formData.nomeFantasia}
-                  onChange={handleChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  Razão Social
-                </label>
-                <input
-                  type="text"
-                  name="razaoSocial"
-                  value={formData.razaoSocial}
-                  onChange={handleChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  Categoria
-                </label>
-                <input
-                  type="text"
-                  name="categoria"
-                  value={formData.categoria}
-                  onChange={handleChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  placeholder="Ex: Pizzaria, Japonês, Italiano..."
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  Email
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  Telefone
-                </label>
-                <input
-                  type="tel"
-                  name="telefone"
-                  value={formData.telefone}
-                  onChange={handleChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  placeholder="(11) 99999-9999"
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
-                  Senha
-                </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="register-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    boxSizing: 'border-box',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  required
-                />
-              </div>
-
-              {error && (
-                <div style={{
-                  marginBottom: '16px',
-                  color: '#dc2626',
-                  background: '#fee2e2',
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  border: '1px solid #fecaca'
-                }}>
-                  ⚠️ {error}
+            {restaurantPhase === 'admin' ? (
+              <form onSubmit={(e) => { e.preventDefault(); createAdminForRestaurant(); }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    Nome de usuário do administrador
+                  </label>
+                  <input
+                    type="text"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    required
+                  />
                 </div>
-              )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="register-button"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: loading ? '#9ca3af' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '10px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontSize: '15px',
-                  fontWeight: '600',
-                  marginBottom: '12px'
-                }}
-              >
-                {loading ? 'Criando restaurante...' : 'Criar restaurante'}
-              </button>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    CPF
+                  </label>
+                  <input
+                    type="text"
+                    name="cpf"
+                    value={formData.cpf}
+                    onChange={handleCPFChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    placeholder="000.000.000-00"
+                    maxLength="14"
+                    required
+                  />
+                </div>
 
-              <button
-                type="button"
-                onClick={() => setStep("choose")}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: 'transparent',
-                  color: '#6b7280',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              >
-                ← Voltar
-              </button>
-            </form>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    required
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    Telefone
+                  </label>
+                  <input
+                    type="tel"
+                    name="telefone"
+                    value={formData.telefone}
+                    onChange={handleChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    placeholder="(11) 99999-9999"
+                    required
+                  />
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    Senha
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <div style={{
+                    marginBottom: '16px',
+                    color: '#dc2626',
+                    background: '#fee2e2',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    border: '1px solid #fecaca'
+                  }}>
+                    ⚠️ {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="register-button"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: loading ? '#9ca3af' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    marginBottom: '12px'
+                  }}
+                >
+                  {loading ? 'Criando administrador...' : 'Criar administrador e seguir'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStep("choose")}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'transparent',
+                    color: '#6b7280',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  ← Voltar
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={(e) => { e.preventDefault(); createRestaurant(); }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    CNPJ
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.cnpj}
+                    onChange={handleCNPJChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    placeholder="00.000.000/0000-00"
+                    maxLength="18"
+                    required
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    Nome Fantasia
+                  </label>
+                  <input
+                    type="text"
+                    name="nomeFantasia"
+                    value={formData.nomeFantasia}
+                    onChange={handleChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    required
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    Razão Social
+                  </label>
+                  <input
+                    type="text"
+                    name="razaoSocial"
+                    value={formData.razaoSocial}
+                    onChange={handleChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    required
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '13px', color: '#374151' }}>
+                    Categoria
+                  </label>
+                  <input
+                    type="text"
+                    name="categoria"
+                    value={formData.categoria}
+                    onChange={handleChange}
+                    className="register-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      boxSizing: 'border-box',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    placeholder="Ex: Pizzaria, Japonês, Italiano..."
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <div style={{
+                    marginBottom: '16px',
+                    color: '#dc2626',
+                    background: '#fee2e2',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    border: '1px solid #fecaca'
+                  }}>
+                    ⚠️ {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="register-button"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: loading ? '#9ca3af' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    marginBottom: '12px'
+                  }}
+                >
+                  {loading ? 'Criando restaurante...' : 'Criar restaurante'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    // go back to admin phase and clear restaurant fields (no adminId used)
+                    setRestaurantPhase('admin');
+                    setFormData(prev => ({
+                      ...prev,
+                      cnpj: '',
+                      nomeFantasia: '',
+                      razaoSocial: '',
+                      categoria: ''
+                    }));
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'transparent',
+                    color: '#6b7280',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  ← Voltar
+                </button>
+              </form>
+            )}
           </>
         )}
       </div>

@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { me } from "../services/authService";
 
+// ensure a reliable API base is used even when VITE_API_BASE_URL isn't defined
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -53,19 +56,67 @@ export function AuthProvider({ children }) {
   async function login(username, password) {
     setLoading(true);
     try {
-      // mantém seu fluxo atual de login (via LoginForm -> /auth/login)
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, {
+      // Log do request antes de enviar
+      const payload = { 
+        username: username.trim(),
+        password: password
+      };
+      console.log("Enviando login para:", `${API_BASE}/auth/login`);
+      console.log("Payload:", payload);
+
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Origin": window.location.origin
+        },
+        mode: "cors",
+        credentials: "include",
+        body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error("Falha no login");
+      
+      // Log detalhado da resposta
+      console.log("Resposta do servidor:", {
+        ok: res.ok,
+        status: res.status,
+        statusText: res.statusText,
+        headers: Object.fromEntries([...res.headers]),
+        url: res.url
+      });
+      
+      if (!res.ok) {
+        const body = await res.text();
+        console.error("Login falhou:", { 
+          request: {
+            url: `${API_BASE}/auth/login`,
+            payload
+          },
+          response: {
+            status: res.status,
+            statusText: res.statusText,
+            body,
+            headers: Object.fromEntries([...res.headers])
+          }
+        });
+        throw new Error(`Falha no login (HTTP ${res.status}): ${body}`);
+      }
+
+      // Backend retorna exatamente { roles, token, username }
       const data = await res.json();
-      const token = data?.token || data?.accessToken || data?.jwt || data?.id_token;
-      const meRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/users/me`, {
-        headers: { Authorization: `Bearer ${token}` }
+      console.log("Login bem sucedido:", { 
+        username: data.username,
+        roles: data.roles,
+        tokenLength: data.token?.length
       });
-      const user = meRes.ok ? await meRes.json() : (data?.user || null);
+      
+      // Extrair token e user info
+      const token = data.token;
+      const user = {
+        username: data.username,
+        role: data.roles?.[0] || null,  // pega primeiro role como principal
+        roles: data.roles || []
+      };
 
       const next = { token, user };
       setAuth(next);
@@ -80,7 +131,9 @@ export function AuthProvider({ children }) {
   }
 
   const isAuthenticated = !!auth?.token;
-  const role = auth?.user?.role || auth?.user?.roles?.[0] || null;
+  // role já está normalizado no user.role
+  const role = auth?.user?.role;
+  const roles = auth?.user?.roles || [];
 
   return (
     <AuthContext.Provider value={{ auth, role, isAuthenticated, loading, login, logout }}>
