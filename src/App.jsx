@@ -4,8 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginForm } from './component/LoginForm';
 import { RegisterPage } from './RegisterPage';
 import { Navbar } from './component/Navbar';
-import { MapaRestaurantes } from './component/MapaRestaurantes';
-import { CadastroJuridico } from './component/CadastroJuridico';
+import MapaRestaurantes from './component/MapaRestaurantes';
+import CadastroJuridico from './component/CadastroJuridico';
 
 // Wrapper para rotas protegidas
 function PrivateRoute({ children }) {

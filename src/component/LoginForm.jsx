@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import logo from '../assets/react.svg';
 
 export function LoginForm({ onLoginSuccess }) {
   const [username, setUsername] = useState("");
@@ -122,7 +123,8 @@ export function LoginForm({ onLoginSuccess }) {
       }}>
         {/* Logo/Ícone */}
         <div className="login-logo">
-          <span style={{ fontSize: '40px' }} aria-hidden>🔐</span>
+          {/* Use an actual SVG asset instead of emoji (emoji may not render on some Linux setups) */}
+          <img src={logo} alt="logo" style={{ width: '56px', height: '56px' }} />
         </div>
 
         <h2 className="login-title">
